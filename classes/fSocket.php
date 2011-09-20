@@ -34,6 +34,13 @@ class fSocket
 		}
 	}
 
+	static public function requireNumeric( $param, $name )
+	{
+		if( !is_numeric($param) ) {
+			throw new fProgrammerException( "Parameter \$$name must be numeric." );
+		}
+	}
+
 	static public function requireNonEmptyString( $param, $name )
 	{
 		if( !is_string($param) || empty($param) ) {
@@ -68,21 +75,51 @@ class fSocket
 
 	/**
 	 * The connection.
+	 *
+	 * @var Resource
 	 */
 	protected $connection = FALSE;
 
+	/**
+	 * The port the SMTP server is on
+	 * 
+	 * @var integer
+	 */
+	private $port;
+	
+	/**
+	 * If the connection to the SMTP server is secure
+	 * 
+	 * @var boolean
+	 */
+	private $secure;
+	
+	/**
+	 * The timeout for the connection
+	 * 
+	 * @var integer
+	 */
+	private $timeout;
+
+	/**
+	 * The hostname or IP of the SMTP server
+	 * 
+	 * @var string
+	 */
+	private $host;
+	
 
 
 	/**
 	 * Instance constructor. Creates an fSocket to the given host,port 
 	 */
-	public function __construct( $host, $port, $timeout = NULL, $secure = FALSE )
+	public function __construct( $host, $port, $secure = FALSE, $timeout = NULL )
 	{
 		self::requireNonEmptyString( $host, 'host' );
 		$this->host    = $host;
 
-		self::requireInt( $port, 'port' );
-		$this->port    = $port;
+		self::requireNumeric( $port, 'port' );
+		$this->port    = (int)$port;
 
 		if ($timeout === NULL) {
 			$timeout = ini_get('default_socket_timeout');
@@ -115,12 +152,46 @@ class fSocket
 		return $res;
 	}
 
+	/**
+	 * Get the connection's secure flag.
+	 *
+	 * @return Bool True if the connection was started securely. False otherwise. 
+	 */
+	public function getSecure()
+	{
+		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		return $this->secure;
+	}
+
+	public function getHost()
+	{
+		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		return $this->host;
+	}
+
+	public function getPort()
+	{
+		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		return $this->port;
+	}
+
+	public function getTimeout()
+	{
+		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		return $this->timeout;
+	}
+
+	public function isConnected()
+	{
+		return (FALSE !== $this->connection);
+	}
 
 	/**
 	 * Opens a socket connection.
 	 */
 	public function connect()
 	{
+		echo __METHOD__,"\n";
 		if( !$this->connection ) {
 			fCore::startErrorCapture(E_WARNING);
 

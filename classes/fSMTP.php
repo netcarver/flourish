@@ -2,14 +2,16 @@
 /**
  * Creates a connection to an SMTP server to be used by fEmail
  * 
- * @copyright  Copyright (c) 2010-2011 Will Bond
+ * @copyright  Copyright (c) 2010-2011 Will Bond, others
  * @author     Will Bond [wb] <will@flourishlib.com>
+ * @author     netcarver [n] <fContrib@netcarving.com>
  * @license    http://flourishlib.com/license
  * 
  * @package    Flourish
  * @link       http://flourishlib.com/fSMTP
  * 
- * @version    1.0.0b11
+ * @version    1.0.0b12
+ * @changes    1.0.0b12  Refactored to use fSocket transport [n, 2011-09-xx] TODO
  * @changes    1.0.0b11  Enhanced the error checking for ::write() [wb, 2011-06-03]
  * @changes    1.0.0b10  Added code to work around PHP bug #42682 (http://bugs.php.net/bug.php?id=42682) where `stream_select()` doesn't work on 64bit machines from PHP 5.2.0 to 5.2.5, improved timeouts while reading data [wb, 2011-01-10]
  * @changes    1.0.0b9   Fixed a bug where lines starting with `.` and containing other content would have the `.` stripped [wb, 2010-09-11]
@@ -36,7 +38,7 @@ class fSMTP
 	 * 
 	 * @var resource
 	 */
-	private $connection;
+	private $socket;
 	
 	/**
 	 * If debugging has been enabled
@@ -50,7 +52,7 @@ class fSMTP
 	 * 
 	 * @var string
 	 */
-	private $host;
+	//private $host;
 	
 	/**
 	 * The maximum size message the SMTP server supports
@@ -78,7 +80,7 @@ class fSMTP
 	 * 
 	 * @var integer
 	 */
-	private $port;
+	//private $port;
 	
 	/**
 	 * If the connection to the SMTP server is secure
@@ -92,7 +94,7 @@ class fSMTP
 	 * 
 	 * @var integer
 	 */
-	private $timeout;
+	//private $timeout;
 	
 	/**
 	 * The username to authenticate with
@@ -120,24 +122,11 @@ class fSMTP
 	 */
 	public function __construct($host, $port=NULL, $secure=FALSE, $timeout=NULL)
 	{
-		if ($timeout === NULL) {
-			$timeout = ini_get('default_socket_timeout');
-		}
 		if ($port === NULL) {
 			$port = !$secure ? 25 : 465;
 		}
-		
-		if ($secure && !extension_loaded('openssl')) {
-			throw new fEnvironmentException(
-				'A secure connection was requested, but the %s extension is not installed',
-				'openssl'
-			);
-		}
-		
-		$this->host    = $host;
-		$this->port    = $port;
-		$this->secure  = $secure;
-		$this->timeout = $timeout;
+
+		$this->socket = new fSocket( $host, $port, $secure, $timeout);
 	}
 	
 	
@@ -194,13 +183,13 @@ class fSMTP
 	 */
 	public function close()
 	{
-		if (!$this->connection) {
+		if (!$this->socket || !$this->socket->isConnected()) {
 			return;
 		}
 		
 		$this->write('QUIT', 1);
-		fclose($this->connection);
-		$this->connection = NULL;
+		$this->socket->close();
+		$this->socket = NULL;
 	}
 	
 	
@@ -211,33 +200,22 @@ class fSMTP
 	 */
 	private function connect()
 	{
-		if ($this->connection) {
+		echo __METHOD__,"\n";
+		if ($this->socket->isConnected()) {
 			return;
 		}
 		
 		$fqdn = fEmail::getFQDN();
-		
-		fCore::startErrorCapture(E_WARNING);
-		
-		$host = ($this->secure) ? 'tls://' . $this->host : $this->host;
-		$this->connection = fsockopen($host, $this->port, $error_int, $error_string, $this->timeout);
-		
-		foreach (fCore::stopErrorCapture('#ssl#i') as $error) {
-			throw new fConnectivityException('There was an error connecting to the server. A secure connection was requested, but was not available. Try a non-secure connection instead.');
-		}
-		
-		if (!$this->connection) {
-			throw new fConnectivityException('There was an error connecting to the server');
-		}
-		
-		stream_set_timeout($this->connection, $this->timeout);
+
+		$this->socket->connect();
+
 		$response = $this->read('#^220 #');
 		if (!$this->find($response, '#^220[ -]#')) {
 			throw new fConnectivityException(
 				'Unknown SMTP welcome message, %1$s, from server %2$s on port %3$s',
 				join("\r\n", $response),
-				$this->host,
-				$this->port
+				$this->socket->getHost(),
+				$this->socket->getPort()
 			);		
 		}
 		
@@ -256,7 +234,7 @@ class fSMTP
 					if (isset($res)) {
 						sleep(0.1);	
 					}
-					$res = stream_socket_enable_crypto($this->connection, TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+					$res = stream_socket_enable_crypto($this->socket, TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 				} while ($res === 0);
 			}
 			if (!$affirmative || $res === FALSE) {
@@ -299,8 +277,8 @@ class fSMTP
 			if ($missing_qop_auth || $missing_nonce) {
 				throw new fUnexpectedException(
 					'The SMTP server %1$s on port %2$s claims to support DIGEST-MD5, but does not seem to provide auth functionality',
-					$this->host,
-					$this->port
+					$this->socket->getHost(),
+					$this->socket->getPort()
 				);
 			}
 			if (!isset($request_params['realm'])) {
@@ -312,7 +290,7 @@ class fSMTP
 			$nonce      = $request_params['nonce'];
 			$cnonce     = fCryptography::randomString('32', 'hexadecimal');
 			$nc         = '00000001';
-			$digest_uri = 'smtp/' . $this->host;
+			$digest_uri = 'smtp/' . $this->socket->getHost();
 			
 			$a1 = md5($this->username . ':' . $realm . ':' . $this->password, TRUE) . ':' . $nonce . ':' . $cnonce;	
 			$a2 = 'AUTHENTICATE:' . $digest_uri;
@@ -350,8 +328,8 @@ class fSMTP
 		if ($this->find($response, '#^535[ -]#')) {
 			throw new fValidationException(
 				'The username and password provided were not accepted for the SMTP server %1$s on port %2$s',
-				$this->host,
-				$this->port
+				$this->socket->getHost(),
+				$this->socket->getPort()
 			);
 		}
 		if (!array_filter($response)) {
@@ -413,8 +391,8 @@ class fSMTP
 		if ($errors) {
 			throw new fUnexpectedException(
 				"The following unexpected SMTP errors occurred for the server %1\$s on port %2\$s:\n%3\$s",
-				$this->host,
-				$this->port,
+				$this->socket->getHost(),
+				$this->socket->getPort(),
 				join("\n", $errors)
 			);		
 		}
@@ -429,10 +407,11 @@ class fSMTP
 	 */
 	private function read($expect)
 	{
+		/*
 		$response = array();
 		if ($result = $this->select($this->timeout, 0)) {
-			while (!feof($this->connection)) {
-				$line = fgets($this->connection);
+			while (!feof($this->socket)) {
+				$line = fgets($this->socket);
 				if ($line === FALSE) {
 					break;
 				}
@@ -453,6 +432,8 @@ class fSMTP
 				}
 			}
 		}
+		 */
+		$response = $this->socket->read($expect);
 		if (fCore::getDebug($this->debug)) {
 			fCore::debug("Received:\n" . join("\r\n", $response), $this->debug);
 		}
@@ -467,10 +448,9 @@ class fSMTP
 	 * @param integer $timeout   The number of seconds in the timeout
 	 * @param integer $utimeout  The number of microseconds in the timeout
 	 * @return boolean|string  TRUE (or a character) is the connection is ready to be read from, FALSE if not
-	 */
 	private function select($timeout, $utimeout)
 	{
-		$read     = array($this->connection);
+		$read     = array($this->socket);
 		$write    = NULL;
 		$except   = NULL;
 		
@@ -493,7 +473,7 @@ class fSMTP
 				if ($i) {
 					usleep(50000);
 				}
-				$char = fgetc($this->connection);
+				$char = fgetc($this->socket);
 				if ($char != "\x00" && $char !== FALSE) {
 					$broken_select_buffer = $char;
 				}
@@ -510,6 +490,7 @@ class fSMTP
 		
 		return $select;
 	}
+	 */
 	
 	
 	/**
@@ -573,7 +554,8 @@ class fSMTP
 		$this->write('RSET', 1);
 	}
 	
-	
+
+
 	/**
 	 * Sends raw text/commands to the SMTP server
 	 * 
@@ -583,10 +565,6 @@ class fSMTP
 	 */
 	private function write($data, $expect)
 	{
-		if (!$this->connection) {
-			throw new fProgrammerException('Unable to send data since the connection has already been closed');
-		}
-		
 		if (substr($data, -2) != "\r\n") {
 			$data .= "\r\n";
 		}
@@ -594,11 +572,7 @@ class fSMTP
 			fCore::debug("Sending:\n" . trim($data), $this->debug);
 		}
 		
-		$res = fwrite($this->connection, $data);
-		
-		if ($res === FALSE || $res === 0) {
-			throw new fConnectivityException('Unable to write data to SMTP server %1$s on port %2$s', $this->host, $this->port);	
-		}
+		$res = $this->socket->write($data);
 		$response = $this->read($expect);
 		return $response;
 	}
