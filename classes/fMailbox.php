@@ -794,7 +794,7 @@ class fMailbox
 	private $command_num = 1;
 	
 	/**
-	 * The connection resource
+	 * The socket resource
 	 * 
 	 * @var resource
 	 */
@@ -808,39 +808,11 @@ class fMailbox
 	private $debug;
 	
 	/**
-	 * The server hostname or IP address
-	 * 
-	 * @var string
-	 */
-	//private $host;
-	
-	/**
 	 * The password for the account
 	 * 
 	 * @var string
 	 */
-	//private $password;
-	
-	/**
-	 * The port for the server
-	 * 
-	 * @var integer
-	 */
-	//private $port;
-	
-	/**
-	 * If the connection to the server should be secure
-	 * 
-	 * @var boolean
-	 */
-	//private $secure;
-	
-	/**
-	 * The timeout for the connection
-	 * 
-	 * @var integer
-	 */
-	//private $timeout = 5;
+	private $password;
 	
 	/**
 	 * The type of mailbox, `'imap'` or `'pop3'`
@@ -905,9 +877,9 @@ class fMailbox
 		}
 		
 		$this->type     = $type;
-		//$this->host     = $host;
 		$this->username = $username;
 		$this->password = $password;
+		//$this->host     = $host;
 		//$this->port     = $port;
 		//$this->secure   = $secure;
 		//$this->timeout  = $timeout;
@@ -1003,7 +975,7 @@ class fMailbox
 				preg_match('#<[^@]+@[^>]+>#', $response[0], $match);
 			}
 			
-			if (!$this->secure && extension_loaded('openssl')) {
+			if (!$secure && extension_loaded('openssl')) {
 				$response = $this->write('STLS', 1);
 				if ($response[0][0] == '+') {
 					do {
@@ -1011,7 +983,6 @@ class fMailbox
 							sleep(0.1);	
 						}
 						$res = $this->socket->setCrypto( TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT );
-						//$res = stream_socket_enable_crypto($this->connection, TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 					} while ($res === 0);
 					if ($res === FALSE) {
 						throw new fConnectivityException('Error establishing secure connection');

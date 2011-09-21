@@ -112,12 +112,12 @@ class fMailboxTest extends PHPUnit_Framework_TestCase
 		
 		$mailbox = new fMailbox($type, $host, $username, $password . 'hjdkshkdjas', $port, $secure, 5);
 		$mailbox->addSMIMEPair('tests@flourishlib.com', './email/tests@flourishlib.com.crt', './email/tests@flourishlib.com.key', EMAIL_PASSWORD);
-		$mailbox->listMessages();
+		$list = $mailbox->listMessages();
 	}	
 	
 	/**
 	 * @dataProvider serverProvider
-	 */	
+	 */
 	public function testListGet($type, $host, $port, $secure, $username, $password)
 	{
 		$mailbox = new fMailbox($type, $host, $username, $password, $port, $secure, 5);

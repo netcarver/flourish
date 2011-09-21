@@ -183,12 +183,10 @@ class fSMTP
 	 */
 	public function close()
 	{
-		if (!$this->socket || !$this->socket->isConnected()) {
-			return;
+		if (NULL!==$this->socket && $this->socket->isConnected()) {
+			$this->write('QUIT', 1);
+			$this->socket->close();
 		}
-		
-		$this->write('QUIT', 1);
-		$this->socket->close();
 		$this->socket = NULL;
 	}
 	

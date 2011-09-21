@@ -48,9 +48,9 @@ class fSocket
 		}
 	}
 
-	static public function requireNotFalse( $var, $msg )
+	static public function requireResource( &$var, $msg )
 	{
-		if( !$var ) {
+		if( !is_resource($var) ) {
 			throw new fProgrammerException( $msg );
 		}
 	}
@@ -78,7 +78,7 @@ class fSocket
 	 *
 	 * @var Resource
 	 */
-	protected $connection = FALSE;
+	private $connection = NULL;
 
 	/**
 	 * The port the server is on
@@ -132,6 +132,8 @@ class fSocket
 		}
 		$secure = $secure && extension_loaded('openssl');
 		$this->secure  = $secure;
+
+		$this->connection = NULL;
 	}
 
 
@@ -146,7 +148,7 @@ class fSocket
 	 **/
 	public function setCrypto( $state , $flags )
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		self::requireResource( $this->connection, 'Call connect() on the socket first.' );
 
 		$res = stream_socket_enable_crypto($this->connection, $state, $flags );
 		return $res;
@@ -159,31 +161,27 @@ class fSocket
 	 */
 	public function getSecure()
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
 		return $this->secure;
 	}
 
 	public function getHost()
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
 		return $this->host;
 	}
 
 	public function getPort()
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
 		return $this->port;
 	}
 
 	public function getTimeout()
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
 		return $this->timeout;
 	}
 
 	public function isConnected()
 	{
-		return (FALSE !== $this->connection);
+		return (NULL !== $this->connection && is_resource($this->connection));
 	}
 
 	/**
@@ -191,8 +189,7 @@ class fSocket
 	 */
 	public function connect()
 	{
-//		echo __METHOD__,"\n";
-		if( !$this->connection ) {
+		if( !is_resource($this->connection) ) {
 			fCore::startErrorCapture(E_WARNING);
 
 			$this->connection = fsockopen(
@@ -274,7 +271,7 @@ class fSocket
 	// TODO make this non-line oriented?? -- individual protocols may expect EOL as \r\n etc but this underlying abstraction should probably treat as a blob.
 	public function read( $expect )
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		self::requireResource( $this->connection, 'Call connect() on the socket first.' );
 
 		$response = array();
 		if ($result = $this->select($this->timeout, 0)) {
@@ -316,7 +313,7 @@ class fSocket
 	 */
 	public function write( $data )
 	{
-		self::requireNotFalse( $this->connection, 'Call connect() on the socket first.' );
+		self::requireResource( $this->connection, 'Call connect() on the socket first.' );
 		self::requireNonEmptyString( $data, 'data' );
 
 		$remaining = strlen(utf8_decode($data));
@@ -342,10 +339,20 @@ class fSocket
 	
 	public function close()
 	{
-		if (FALSE !== $this->connection) {
-			fclose( $this->connection );
-			$this->connection = FALSE;
+		//echo __METHOD__, ' $this->connection[', var_dump( $this->connection ), "]\n";
+
+		if (NULL === $this->connection) {
+			return;
 		}
+
+		if( is_resource( $this->connection ) ) {
+			$ok = fclose( $this->connection );
+			if( !$ok ) {
+				throw new fConnectivityException( "Could not close socket with id[{$this->connection}]." );
+			}
+		}
+
+		$this->connection = NULL;
 	}
 }
 
