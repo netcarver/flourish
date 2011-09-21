@@ -1298,6 +1298,8 @@ class fMailbox
 	 */
 	private function read($expect=NULL)
 	{
+		$response = $this->socket->read( $expect );
+
 		if ($this->type == 'pop3') {
 			// Remove the termination octet
 			if ($response && $response[sizeof($response)-1] == '.') {
