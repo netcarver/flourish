@@ -48,13 +48,6 @@ class fSMTP
 	private $debug;
 	
 	/**
-	 * The hostname or IP of the SMTP server
-	 * 
-	 * @var string
-	 */
-	//private $host;
-	
-	/**
 	 * The maximum size message the SMTP server supports
 	 * 
 	 * @var integer
@@ -76,25 +69,11 @@ class fSMTP
 	private $pipelining;
 	
 	/**
-	 * The port the SMTP server is on
-	 * 
-	 * @var integer
-	 */
-	//private $port;
-	
-	/**
 	 * If the connection to the SMTP server is secure
 	 * 
 	 * @var boolean
 	 */
-	private $secure;
-	
-	/**
-	 * The timeout for the connection
-	 * 
-	 * @var integer
-	 */
-	//private $timeout;
+	//private $secure;
 	
 	/**
 	 * The username to authenticate with
@@ -405,32 +384,6 @@ class fSMTP
 	 */
 	private function read($expect)
 	{
-		/*
-		$response = array();
-		if ($result = $this->select($this->timeout, 0)) {
-			while (!feof($this->socket)) {
-				$line = fgets($this->socket);
-				if ($line === FALSE) {
-					break;
-				}
-				$line = substr($line, 0, -2);
-				if (is_string($result)) {
-					$line = $result . $line;
-				}
-				$response[] = $line;
-				if ($expect !== NULL) {
-					$result = NULL;
-					$matched_number = is_int($expect) && sizeof($response) == $expect;
-					$matched_regex  = is_string($expect) && preg_match($expect, $response[sizeof($response)-1]);
-					if ($matched_number || $matched_regex) {
-						break;
-					}
-				} elseif (!($result = $this->select(0, 200000))) {
-					break;
-				}
-			}
-		}
-		 */
 		$response = $this->socket->read($expect);
 		if (fCore::getDebug($this->debug)) {
 			fCore::debug("Received:\n" . join("\r\n", $response), $this->debug);
@@ -438,57 +391,6 @@ class fSMTP
 		$this->handleErrors($response);
 		return $response;
 	}
-	
-	
-	/**
-	 * Performs a "fixed" stream_select() for the connection
-	 * 
-	 * @param integer $timeout   The number of seconds in the timeout
-	 * @param integer $utimeout  The number of microseconds in the timeout
-	 * @return boolean|string  TRUE (or a character) is the connection is ready to be read from, FALSE if not
-	private function select($timeout, $utimeout)
-	{
-		$read     = array($this->socket);
-		$write    = NULL;
-		$except   = NULL;
-		
-		// PHP 5.2.0 to 5.2.5 had a bug on amd64 linux where stream_select()
-		// fails, so we have to fake it - http://bugs.php.net/bug.php?id=42682
-		static $broken_select = NULL;
-		if ($broken_select === NULL) {
-			$broken_select = strpos(php_uname('m'), '64') !== FALSE && fCore::checkVersion('5.2.0') && !fCore::checkVersion('5.2.6');
-		}
-		
-		// Fixes an issue with stream_select throwing a warning on PHP 5.3 on Windows
-		if (fCore::checkOS('windows') && fCore::checkVersion('5.3.0')) {
-			$select = @stream_select($read, $write, $except, $timeout, $utimeout);
-		
-		} elseif ($broken_select) {
-			$broken_select_buffer = NULL;
-			$start_time = microtime(TRUE);
-			$i = 0;
-			do {
-				if ($i) {
-					usleep(50000);
-				}
-				$char = fgetc($this->socket);
-				if ($char != "\x00" && $char !== FALSE) {
-					$broken_select_buffer = $char;
-				}
-				$i++;
-				if ($i > 2) {
-					break;
-				}
-			} while ($broken_select_buffer === NULL && microtime(TRUE) - $start_time < ($timeout + ($utimeout/1000000)));
-			$select = $broken_select_buffer === NULL ? FALSE : $broken_select_buffer;
-			
-		} else {
-			$select = stream_select($read, $write, $except, $timeout, $utimeout);
-		}
-		
-		return $select;
-	}
-	 */
 	
 	
 	/**

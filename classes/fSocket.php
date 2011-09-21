@@ -15,6 +15,9 @@
  */
 class fSocket
 {
+	const setStrictlySecure = 'fSocket::setStrictlySecure';
+	
+
 	/**
 	 * Possible requireXYZ() candidates for fCore?
 	 *
@@ -339,8 +342,6 @@ class fSocket
 	
 	public function close()
 	{
-		//echo __METHOD__, ' $this->connection[', var_dump( $this->connection ), "]\n";
-
 		if (NULL === $this->connection) {
 			return;
 		}

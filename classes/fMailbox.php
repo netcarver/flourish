@@ -879,12 +879,8 @@ class fMailbox
 		$this->type     = $type;
 		$this->username = $username;
 		$this->password = $password;
-		//$this->host     = $host;
-		//$this->port     = $port;
-		//$this->secure   = $secure;
-		//$this->timeout  = $timeout;
 
-		$this->socket = new fSocket( $host, $port, $secure, $timeout );
+		$this->socket   = new fSocket( $host, $port, $secure, $timeout );
 	}
 	
 	
@@ -1302,79 +1298,6 @@ class fMailbox
 	 */
 	private function read($expect=NULL)
 	{
-		/*
-		$read     = array($this->connection);
-		$write    = NULL;
-		$except   = NULL;
-		$response = array();
-		
-		// PHP 5.2.0 to 5.2.5 has a bug on amd64 linux where stream_select()
-		// fails, so we have to fake it - http://bugs.php.net/bug.php?id=42682
-		static $broken_select = NULL;
-		if ($broken_select === NULL) {
-			$broken_select = strpos(php_uname('m'), '64') !== FALSE && fCore::checkVersion('5.2.0') && !fCore::checkVersion('5.2.6');
-		}
-		
-		// Fixes an issue with stream_select throwing a warning on PHP 5.3 on Windows
-		if (fCore::checkOS('windows') && fCore::checkVersion('5.3.0')) {
-			$select = @stream_select($read, $write, $except, $this->timeout);
-		
-		} elseif ($broken_select) {
-			$broken_select_buffer = NULL;
-			$start_time = microtime(TRUE);
-			$i = 0;
-			do {
-				if ($i) {
-					usleep(50000);
-				}
-				$char = fgetc($this->connection);
-				if ($char != "\x00" && $char !== FALSE) {
-					$broken_select_buffer = $char;
-				}
-				$i++;
-			} while ($broken_select_buffer === NULL && microtime(TRUE) - $start_time < $this->timeout);
-			$select = $broken_select_buffer !== NULL;
-			
-		} else {
-			$select = stream_select($read, $write, $except, $this->timeout);
-		}
-		
-		if ($select) {
-			while (!feof($this->connection)) {
-				$line = fgets($this->connection);
-				if ($line === FALSE) {
-					break;
-				}
-				$line = substr($line, 0, -2);
-				
-				// When we fake select, we have to handle what we've retrieved
-				if ($broken_select && $broken_select_buffer !== NULL) {
-					$line = $broken_select_buffer . $line;
-					$broken_select_buffer = NULL;
-				}
-				
-				$response[] = $line;
-				
-				// Automatically stop at the termination octet or a bad response
-				if ($this->type == 'pop3' && ($line == '.' || (count($response) == 1 && $response[0][0] == '-'))) {
-					break;
-				}
-				
-				if ($expect !== NULL) {
-					$matched_number = is_int($expect) && sizeof($response) == $expect;
-					$matched_regex  = is_string($expect) && preg_match($expect, $line);
-					if ($matched_number || $matched_regex) {
-						break;
-					}
-				}
-			}
-		}
-		if (fCore::getDebug($this->debug)) {
-			fCore::debug("Received:\n" . join("\r\n", $response), $this->debug);
-		}
-		 */
-
-		$response = $this->socket->read( $expect );
 		if ($this->type == 'pop3') {
 			// Remove the termination octet
 			if ($response && $response[sizeof($response)-1] == '.') {
