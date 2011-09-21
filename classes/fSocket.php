@@ -81,14 +81,14 @@ class fSocket
 	protected $connection = FALSE;
 
 	/**
-	 * The port the SMTP server is on
+	 * The port the server is on
 	 * 
 	 * @var integer
 	 */
 	private $port;
 	
 	/**
-	 * If the connection to the SMTP server is secure
+	 * If the connection to the server is secure
 	 * 
 	 * @var boolean
 	 */
@@ -102,7 +102,7 @@ class fSocket
 	private $timeout;
 
 	/**
-	 * The hostname or IP of the SMTP server
+	 * The hostname or IP of the server
 	 * 
 	 * @var string
 	 */
@@ -111,7 +111,7 @@ class fSocket
 
 
 	/**
-	 * Instance constructor. Creates an fSocket to the given host,port 
+	 * Instance constructor. Creates an unconnected fSocket to the given host,port 
 	 */
 	public function __construct( $host, $port, $secure = FALSE, $timeout = NULL )
 	{
@@ -191,7 +191,7 @@ class fSocket
 	 */
 	public function connect()
 	{
-		echo __METHOD__,"\n";
+//		echo __METHOD__,"\n";
 		if( !$this->connection ) {
 			fCore::startErrorCapture(E_WARNING);
 
@@ -304,7 +304,6 @@ class fSocket
 		if (fCore::getDebug($this->debug)) {
 			fCore::debug("Received:\n" . join("\r\n", $response), $this->debug);
 		}
-		//$this->handleErrors($response);
 		return $response;
 	}
 
@@ -343,7 +342,7 @@ class fSocket
 	
 	public function close()
 	{
-		if( $this->connection ) {
+		if (FALSE !== $this->connection) {
 			fclose( $this->connection );
 			$this->connection = FALSE;
 		}

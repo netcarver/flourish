@@ -5,14 +5,16 @@
  * All headers, text and html content returned by this class are encoded in
  * UTF-8. Please see http://flourishlib.com/docs/UTF-8 for more information.
  * 
- * @copyright  Copyright (c) 2010-2011 Will Bond
+ * @copyright  Copyright (c) 2010-2011 Will Bond, others
  * @author     Will Bond [wb] <will@flourishlib.com>
+ * @author     netcarver [n]  <fContrib@netcarving.com>
  * @license    http://flourishlib.com/license
  * 
  * @package    Flourish
  * @link       http://flourishlib.com/fMailbox
  * 
- * @version    1.0.0b14
+ * @version    1.0.0b15
+ * @version    1.0.0b15  Refactored to use fSocket [n, 2011-09-22]
  * @changes    1.0.0b14  Added a workaround for iconv having issues in MAMP 1.9.4+ [wb, 2011-07-26]
  * @changes    1.0.0b13  Fixed handling of headers in relation to encoded-words being embedded inside of quoted strings [wb, 2011-07-26]
  * @changes    1.0.0b12  Enhanced the error checking in ::write() [wb, 2011-06-03]
@@ -796,7 +798,7 @@ class fMailbox
 	 * 
 	 * @var resource
 	 */
-	private $connection;
+	private $socket;
 	
 	/**
 	 * If debugging has been enabled
@@ -810,35 +812,35 @@ class fMailbox
 	 * 
 	 * @var string
 	 */
-	private $host;
+	//private $host;
 	
 	/**
 	 * The password for the account
 	 * 
 	 * @var string
 	 */
-	private $password;
+	//private $password;
 	
 	/**
 	 * The port for the server
 	 * 
 	 * @var integer
 	 */
-	private $port;
+	//private $port;
 	
 	/**
 	 * If the connection to the server should be secure
 	 * 
 	 * @var boolean
 	 */
-	private $secure;
+	//private $secure;
 	
 	/**
 	 * The timeout for the connection
 	 * 
 	 * @var integer
 	 */
-	private $timeout = 5;
+	//private $timeout = 5;
 	
 	/**
 	 * The type of mailbox, `'imap'` or `'pop3'`
@@ -903,12 +905,14 @@ class fMailbox
 		}
 		
 		$this->type     = $type;
-		$this->host     = $host;
+		//$this->host     = $host;
 		$this->username = $username;
 		$this->password = $password;
-		$this->port     = $port;
-		$this->secure   = $secure;
-		$this->timeout  = $timeout;
+		//$this->port     = $port;
+		//$this->secure   = $secure;
+		//$this->timeout  = $timeout;
+
+		$this->socket = new fSocket( $host, $port, $secure, $timeout );
 	}
 	
 	
@@ -930,17 +934,20 @@ class fMailbox
 	 */
 	public function close()
 	{
-		if (!$this->connection) {
+		if (NULL === $this->socket) {
 			return;
 		}
-		
-		if ($this->type == 'imap') {
-			$this->write('LOGOUT');
-		} else {
-			$this->write('QUIT', 1);
+
+		if ($this->socket->isConnected()) {
+			if ($this->type == 'imap') {
+				$this->write('LOGOUT');
+			} else {
+				$this->write('QUIT', 1);
+			}
+
+			$this->socket->close();
+			$this->socket = NULL;
 		}
-		
-		$this->connection = NULL;
 	}
 	
 	
@@ -951,33 +958,15 @@ class fMailbox
 	 */
 	private function connect()
 	{
-		if ($this->connection) {
+		if (NULL !== $this->socket && $this->socket->isConnected()) {
 			return;
 		}
 		
-		fCore::startErrorCapture(E_WARNING);
-		
-		$this->connection = fsockopen(
-			$this->secure ? 'tls://' . $this->host : $this->host,
-			$this->port,
-			$error_number,
-			$error_string,
-			$this->timeout
-		);
-		
-		foreach (fCore::stopErrorCapture('#ssl#i') as $error) {
-			throw new fConnectivityException('There was an error connecting to the server. A secure connection was requested, but was not available. Try a non-secure connection instead.');
-		}
-		
-		if (!$this->connection) {
-			throw new fConnectivityException('There was an error connecting to the server');
-		}
-		
-		stream_set_timeout($this->connection, $this->timeout);
-		
+		$this->socket->connect();
+	    $secure = $this->socket->getSecure();	
 		
 		if ($this->type == 'imap') {
-			if (!$this->secure && extension_loaded('openssl')) {
+			if (!$secure && extension_loaded('openssl')) {
 				$response = $this->write('CAPABILITY');
 				if (preg_match('#\bstarttls\b#i', $response[0])) {
 					$this->write('STARTTLS');
@@ -985,7 +974,7 @@ class fMailbox
 						if (isset($res)) {
 							sleep(0.1);	
 						}
-						$res = stream_socket_enable_crypto($this->connection, TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+						$res = $this->socket->setCrypto( TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT );
 					} while ($res === 0);
 				}
 			}
@@ -995,8 +984,8 @@ class fMailbox
 				throw new fValidationException(
 					'The username and password provided were not accepted for the %1$s server %2$s on port %3$s',
 					strtoupper($this->type),
-					$this->host,
-					$this->port
+					$this->socket->getHost(),
+					$this->socket->getPort()
 				);
 			}
 			$this->write('SELECT "INBOX"');
@@ -1007,8 +996,8 @@ class fMailbox
 				if ($response[0][0] == '-') {
 					throw new fConnectivityException(
 						'There was an error connecting to the POP3 server %1$s on port %2$s',
-						$this->host,
-						$this->port
+						$this->socket->getHost(),
+						$this->socket->getPort()
 					);
 				}
 				preg_match('#<[^@]+@[^>]+>#', $response[0], $match);
@@ -1021,7 +1010,8 @@ class fMailbox
 						if (isset($res)) {
 							sleep(0.1);	
 						}
-						$res = stream_socket_enable_crypto($this->connection, TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+						$res = $this->socket->setCrypto( TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT );
+						//$res = stream_socket_enable_crypto($this->connection, TRUE, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 					} while ($res === 0);
 					if ($res === FALSE) {
 						throw new fConnectivityException('Error establishing secure connection');
@@ -1051,8 +1041,8 @@ class fMailbox
 				throw new fValidationException(
 					'The username and password provided were not accepted for the %1$s server %2$s on port %3$s',
 					strtoupper($this->type),
-					$this->host,
-					$this->port
+					$this->socket->getHost(),
+					$this->socket->getPort()
 				);
 			}
 		}
@@ -1341,6 +1331,7 @@ class fMailbox
 	 */
 	private function read($expect=NULL)
 	{
+		/*
 		$read     = array($this->connection);
 		$write    = NULL;
 		$except   = NULL;
@@ -1410,7 +1401,9 @@ class fMailbox
 		if (fCore::getDebug($this->debug)) {
 			fCore::debug("Received:\n" . join("\r\n", $response), $this->debug);
 		}
-		
+		 */
+
+		$response = $this->socket->read( $expect );
 		if ($this->type == 'pop3') {
 			// Remove the termination octet
 			if ($response && $response[sizeof($response)-1] == '.') {
@@ -1438,7 +1431,7 @@ class fMailbox
 	 */
 	private function write($command, $expected=NULL)
 	{
-		if (!$this->connection) {
+		if (!$this->socket->isConnected()) {
 			throw new fProgrammerException('Unable to send data since the connection has already been closed');
 		}
 		
@@ -1455,14 +1448,14 @@ class fMailbox
 			fCore::debug("Sending:\n" . trim($command), $this->debug);
 		}
 		
-		$res = fwrite($this->connection, $command);
+		$res = $this->socket->write( $command );
 
 		if ($res === FALSE || $res === 0) {
 			throw new fConnectivityException(
 				'Unable to write data to %1$s server %2$s on port %3$s',
 				strtoupper($this->type),
-				$this->host,
-				$this->port
+				$this->socket->getHost(),
+				$this->socket->getPort()
 			);	
 		}
 		
