@@ -177,7 +177,6 @@ class fSMTP
 	 */
 	private function connect()
 	{
-		echo __METHOD__,"\n";
 		if ($this->socket->isConnected()) {
 			return;
 		}
